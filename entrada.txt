@@ -1,0 +1,20 @@
+inicio_programa meuPrograma
+
+inteiro x, y;
+booleano condicao;
+
+funcao soma(inteiro a, inteiro b): inteiro {
+    inteiro resultado;
+    resultado = a + b * 2;
+    escreva(resultado);
+}
+
+procedimento verificarCondicao(inteiro a, inteiro b) {
+    se ((a > b) e (a != 0) ou (b == 10)) {
+        escreva(a);
+    } senao {
+        escreva(b);
+    }
+}
+
+fim_programa
