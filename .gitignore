@@ -1,5 +1,5 @@
-# Cache do Python
+# Ignorar arquivos de cache do Python
 __pycache__/
-*.py[cod]
+*.pyc
 *.pyo
 *.pyd
