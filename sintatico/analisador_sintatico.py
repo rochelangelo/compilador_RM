@@ -16,38 +16,37 @@ class Parser:
             return True
         else:
             self.erro(f"Esperado '{esperado}', mas encontrado '{tipo}' ({lexema})")
-            return False
 
     def erro(self, msg):
         raise SyntaxError(f"Erro sintático na posição {self.pos}: {msg}")
 
-    # Regras principais baseadas na BNF
     def analisar(self):
         self.programa()
+        
+        if self.token_atual()[0] != 'EOF':
+            self.erro(f"Tokens inesperados após 'fim de programa'. Encontrado '{self.token_atual()[0]}' ({self.token_atual()[1]})")
 
     def programa(self):
         self.consumir('START')
         self.consumir('ID')
-        self.bloco_comandos()
+        self.corpo()
         self.consumir('END')
 
-    def bloco_comandos(self):
-        while True:
-            tipo, _ = self.token_atual()
-            if tipo in ('INT', 'BOOL', 'STRING'):
-                self.declaracao_variaveis()
-            elif tipo == 'FUN':
-                self.declaracao_funcao()
-            elif tipo == 'PROC':
-                self.declaracao_procedimento()
-            elif tipo == 'ID':
-                self.atribuicao()
-            elif tipo == 'PRINT':
-                self.comando_escreva()
-            elif tipo == 'IF':
-                self.comando_condicional()
-            else:
-                break
+    def corpo(self):
+        while self.token_atual()[0] in ('INT', 'BOOL', 'STRING', 'FUN', 'PROC'):
+            self.declaracao()
+
+        while self.token_atual()[0] in ('ID', 'PRINT', 'IF', 'WHILE'):
+            self.comando()
+
+    def declaracao(self):
+        tipo, _ = self.token_atual()
+        if tipo in ('INT', 'BOOL', 'STRING'):
+            self.declaracao_variaveis()
+        elif tipo == 'FUN':
+            self.declaracao_funcao()
+        elif tipo == 'PROC':
+            self.declaracao_procedimento()
 
     def declaracao_variaveis(self):
         self.tipo()
@@ -58,7 +57,11 @@ class Parser:
         self.consumir('PONTOVIRGULA')
 
     def tipo(self):
-        self.consumir(self.token_atual()[0])  # INTEIRO | BOOLEANO | TEXTO
+        tipo, _ = self.token_atual()
+        if tipo in ('INT', 'BOOL', 'STRING'):
+            self.consumir(tipo)
+        else:
+            self.erro(f"Tipo inválido: {tipo}")
 
     def declaracao_funcao(self):
         self.consumir('FUN')
@@ -69,7 +72,7 @@ class Parser:
         self.consumir('DOISPONTOS')
         self.tipo()
         self.consumir('LBRACE')
-        self.bloco_comandos()
+        self.corpo()
         self.consumir('RBRACE')
 
     def declaracao_procedimento(self):
@@ -79,7 +82,7 @@ class Parser:
         self.parametros()
         self.consumir('RPAREN')
         self.consumir('LBRACE')
-        self.bloco_comandos()
+        self.corpo()
         self.consumir('RBRACE')
 
     def parametros(self):
@@ -90,6 +93,17 @@ class Parser:
                 self.consumir('VIRGULA')
                 self.tipo()
                 self.consumir('ID')
+
+    def comando(self):
+        tipo, _ = self.token_atual()
+        if tipo == 'ID':
+            self.atribuicao()
+        elif tipo == 'PRINT':
+            self.comando_escreva()
+        elif tipo == 'IF':
+            self.comando_condicional()
+        elif tipo == 'WHILE':
+            self.comando_enquanto()
 
     def atribuicao(self):
         self.consumir('ID')
@@ -110,13 +124,22 @@ class Parser:
         self.expressao()
         self.consumir('RPAREN')
         self.consumir('LBRACE')
-        self.bloco_comandos()
+        self.corpo()
         self.consumir('RBRACE')
         if self.token_atual()[0] == 'ELSE':
             self.consumir('ELSE')
             self.consumir('LBRACE')
-            self.bloco_comandos()
+            self.corpo()
             self.consumir('RBRACE')
+
+    def comando_enquanto(self):
+        self.consumir('WHILE')
+        self.consumir('LPAREN')
+        self.expressao()
+        self.consumir('RPAREN')
+        self.consumir('LBRACE')
+        self.corpo()
+        self.consumir('RBRACE')
 
     def expressao(self):
         self.expressao_or()
@@ -153,7 +176,7 @@ class Parser:
 
     def expressao_fator(self):
         tipo, _ = self.token_atual()
-        if tipo in ('ID', 'NUMERO', 'BOOLEAN'):
+        if tipo in ('ID', 'NUMERO', 'BOOLEAN', 'STRING_LITERAL'):
             self.consumir(tipo)
         elif tipo == 'LPAREN':
             self.consumir('LPAREN')
