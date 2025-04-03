@@ -4,9 +4,8 @@ class TabelaSimbolos:
         self.escopo = escopo
         self.anterior = anterior # para referência ao escopo anterior
     
-    class TabelaSimbolos:
     
-     def verificarCondicao(self, identificador):
+    def verificarCondicao(self, identificador):
         """
         Verifica se um identificador existe no escopo atual ou no global.
 
@@ -65,12 +64,17 @@ class Parser:
         self.tokens = tokens
         self.pos = 0
         self.tabela = TabelaSimbolos()
+        self.linha_atual = 1
 
     def token_atual(self):
         if self.pos < len(self.tokens):
             token = self.tokens[self.pos]
             return token.tipo, token.lexema
         return ('EOF', '')
+    
+    def posicao_token(self):
+        return self.pos # Ou a variável correta que armazena a posição
+
 
     def consumir(self, esperado):
         tipo, lexema = self.token_atual()
@@ -102,7 +106,48 @@ class Parser:
             else:
                 self.comando()
 
+    def expressao_multiplicacao(self):
+        self.expressao_unaria()
+        while self.token_atual()[0] in ('MULT', 'DIV'):
+            self.consumir(self.token_atual()[0])
+            self.expressao_unaria()
 
+    def expressao_unaria(self):
+        if self.token_atual()[0] in ('SUB', 'NEGACAO'):
+            self.consumir(self.token_atual()[0])
+        self.expressao_primaria()
+
+    def expressao_primaria(self):
+        tipo, lexema = self.token_atual()
+
+        if tipo == 'NUMERO':
+            self.consumir('NUMERO')
+            return 'INT'
+        elif tipo == 'STRING_LITERAL':
+            self.consumir('STRING_LITERAL')
+            return 'STRING'
+        elif tipo == 'TRUE' or tipo == 'FALSE':
+            self.consumir(tipo)
+            return 'BOOL'
+        elif tipo == 'ID':
+            _, nome = self.token_atual()
+            if not self.tabela.existe(nome):
+                raise Exception(f"Erro semântico: identificador '{nome}' não declarado no escopo '{self.tabela.escopo}'.")
+            simbolo = self.tabela.buscar(nome)
+            self.consumir('ID')
+            if 'tipo' not in simbolo:
+                raise Exception(f"Erro semântico: identificador '{nome}' não possui um tipo definido na tabela de símbolos.")
+            return simbolo['tipo']
+        elif tipo == 'LPAREN':
+            self.consumir('LPAREN')
+            tipo_expressao = self.expressao()
+            self.consumir('RPAREN')
+            return tipo_expressao
+        else:
+            self.erro(f"Expressão inválida: {lexema}")
+            return None
+
+    
     def declaracao(self):
         tipo, _ = self.token_atual()
         if tipo in ('INT', 'BOOL', 'STRING'):
@@ -194,8 +239,11 @@ class Parser:
         parametros = self.parametros()
         
         for param_nome, param_tipo in parametros:
+            print(f"Adicionando parâmetro '{param_nome}' do tipo '{param_tipo}' ao escopo '{nome}'")  # DEBUG
             self.tabela.adicionar(param_nome, param_tipo, 'parametro')
 
+        print(f"Tabela de símbolos dentro da função '{nome}': {self.tabela.simbolos}")  # Debug
+        
         self.consumir('RPAREN')
 
         escopo_anterior.adicionar(nome, 'VOID', 'procedimento', parametros)
@@ -233,6 +281,17 @@ class Parser:
         elif tipo == 'WHILE':
             self.comando_enquanto()
 
+    def tipos_compativeis(self, tipo_variavel, tipo_expressao):
+        # Tipos idênticos são compatíveis
+        if tipo_variavel == tipo_expressao:
+            return True
+        # Regras adicionais de conversão implícita, se aplicável
+        if tipo_variavel == 'INT' and tipo_expressao == 'BOOL':
+            return True  # Exemplo: permitir atribuir um booleano a um inteiro
+        return False  # Caso contrário, a atribuição é inválida
+
+    
+    
     def atribuicao(self):
         _, nome = self.token_atual()
         print(f"Verificando atribuição para '{nome}' no escopo '{self.tabela.escopo}'")  # DEBUG
@@ -240,11 +299,25 @@ class Parser:
         if not self.tabela.existe(nome):
             raise Exception(f"Erro semântico: identificador '{nome}' não declarado no escopo '{self.tabela.escopo}'.")
 
+        simbolo = self.tabela.buscar(nome)
         self.consumir('ID')
         self.consumir('ATRIBUICAO')
-        self.expressao()
-        self.consumir('PONTOVIRGULA')
 
+        tipo_expressao = self.expressao()
+
+        print(f"DEBUG: '{nome}' declarado como {simbolo['tipo']}, expressão avaliada como {tipo_expressao}")
+        
+        if not self.tipos_compativeis(simbolo['tipo'], tipo_expressao):
+            raise Exception(f"Erro semântico: atribuição inválida. Esperado '{simbolo['tipo']}', mas encontrado '{tipo_expressao}'.")
+        
+        print(f"DEBUG: Próximo token esperado: '{simbolo['tipo']}', recebido: {self.token_atual()}")
+
+        if self.token_atual()[0] == 'PONTOVIRGULA':
+            self.consumir('PONTOVIRGULA')
+        else:
+            print("DEBUG: PONTOVIRGULA já foi consumido, prosseguindo para próximo comando.")
+
+        
 
     def comando_escreva(self):
         self.consumir('PRINT')
@@ -275,9 +348,61 @@ class Parser:
         self.consumir('LBRACE')
         self.corpo()
         self.consumir('RBRACE')
+        
+    
+    def expressao(self): 
+        print(f"DEBUG: Iniciando análise de expressão na linha {self.linha_atual}, token atual: {self.token_atual()}")  # 🔍 Debug
 
-    def expressao(self):
-        self.expressao_or()
+        tipo = self.expressao_termo()
+        print(f"DEBUG: Primeiro termo analisado: {tipo}, próximo token: {self.token_atual()}")  # 🔍 Debug
+
+        while self.token_atual() and self.token_atual()[0] in ('SOMA', 'SUB'):
+            operador = self.token_atual()[0]  # Captura o operador para debug
+            print(f"DEBUG: Consumindo operador {operador}")  # 🔍 Debug
+            self.consumir(operador)  
+            print(f"DEBUG: Após consumir '{operador}', próximo token: {self.token_atual()}")  # 🔍 Debug
+
+            tipo_direita = self.expressao_termo()  
+            print(f"DEBUG: Expressão analisada: {tipo} {operador} {tipo_direita}")  # 🔍 Debug
+
+        print(f"DEBUG: Saindo do loop, próximo token: {self.token_atual()}")  # 🔍 Debug
+        
+        # 🔹 Adicionando operadores relacionais
+        if self.token_atual() and self.token_atual()[0] in ('IGUAL', 'DIFERENTE', 'MENOR', 'MAIOR', 'MENORIGUAL', 'MAIORIGUAL'):
+            operador_relacional = self.token_atual()[0]
+            print(f"DEBUG: Operador relacional encontrado: {operador_relacional}")  # 🔍 Debug
+            self.consumir(operador_relacional)
+            print(f"DEBUG: Após consumir '{operador_relacional}', próximo token: {self.token_atual()}")  # 🔍 Debug
+
+            tipo_direita = self.expressao_termo()
+            print(f"DEBUG: Expressão relacional analisada: {tipo} {operador_relacional} {tipo_direita}")  # 🔍 Debug
+            
+        # 🔹 Adicionando operadores lógicos (AND, OR)
+        while self.token_atual() and self.token_atual()[0] in ('AND', 'OR'):
+            operador_logico = self.token_atual()[0]
+            print(f"DEBUG: Operador lógico encontrado: {operador_logico}")  # 🔍 Debug
+            self.consumir(operador_logico)
+            print(f"DEBUG: Após consumir '{operador_logico}', próximo token: {self.token_atual()}")  # 🔍 Debug
+
+            tipo_direita = self.expressao_termo()
+            print(f"DEBUG: Expressão lógica analisada: {tipo} {operador_logico} {tipo_direita}")  # 🔍 Debug
+
+        # Verifica se estamos dentro de um contexto que exige ';'
+        if self.token_atual() and self.token_atual()[0] == 'PONTOVIRGULA':
+            self.consumir('PONTOVIRGULA')
+            print("DEBUG: PONTOVIRGULA consumido corretamente.")  # 🔍 Debug
+        elif self.token_atual() and self.token_atual()[0] == 'RPAREN':
+            print("DEBUG: RPAREN encontrado, expressão válida dentro de parênteses.")  # 🔍 Debug
+            return tipo
+        else:
+            raise Exception(f"Erro sintático no token {self.pos} ({self.token_atual()}): "
+                            f"Esperado 'PONTOVIRGULA' ou 'RPAREN', mas encontrado '{self.token_atual()[1] if self.token_atual() else 'EOF'}'.")
+
+        return tipo
+
+
+
+
 
     def expressao_or(self):
         self.expressao_and()
@@ -304,25 +429,63 @@ class Parser:
             self.expressao_termo()
 
     def expressao_termo(self):
-        self.expressao_fator()
-        while self.token_atual()[0] in ('MULT', 'DIV'):
-            self.consumir(self.token_atual()[0])
-            self.expressao_fator()
+        print(f"DEBUG: Entrando em expressao_termo na linha {self.linha_atual}, token atual: {self.token_atual()}")
+        
+        tipo = self.expressao_fator()
+
+        while self.token_atual() and self.token_atual()[0] in ('MULT', 'DIV'):
+            operador = self.token_atual()[0]
+            print(f"DEBUG: Encontrado operador {operador}, consumindo...")
+            self.consumir(operador)
+
+            print(f"DEBUG: Após consumir '{operador}', próximo token: {self.token_atual()}")
+            
+            tipo_direita = self.fator()
+            print(f"DEBUG: Tipo do segundo fator: {tipo_direita}")
+
+            if not self.tipos_compativeis(tipo, tipo_direita):
+                raise Exception(f"Erro semântico: Operação inválida entre '{tipo}' e '{tipo_direita}'.")
+
+        print(f"DEBUG: Saindo de expressao_termo, próximo token: {self.token_atual()}")
+        return tipo
+
+
 
     def expressao_fator(self):
-        tipo, _ = self.token_atual()
+        tipo, lexema = self.token_atual()
+
+        print(f"DEBUG: Analisando fator '{lexema}' do tipo '{tipo}'")  # 🔍 Debug
+
         if tipo == 'ID':
-            _, nome = self.token_atual()
-            self.tabela.buscar(nome)  # Verifica se foi declarado
+            # Busca na tabela de símbolos para obter o tipo do identificador
+            simbolo = self.tabela.buscar(lexema)
+            if simbolo is None:
+                self.erro(f"Erro semântico: Variável '{lexema}' não declarada.")
             self.consumir('ID')
-        elif tipo in ('NUMERO', 'BOOLEAN', 'STRING_LITERAL'):
+            return simbolo['tipo']
+
+        elif tipo == 'NUMERO':
+            self.consumir('NUMERO')
+            return 'INT'
+
+        elif tipo == 'STRING':
+            self.consumir('STRING')
+            return 'STRING'
+
+        elif tipo == 'TRUE' or tipo == 'FALSE':
             self.consumir(tipo)
+            return 'BOOL'
+
         elif tipo == 'LPAREN':
             self.consumir('LPAREN')
-            self.expressao()
+            tipo_expressao = self.expressao()
             self.consumir('RPAREN')
+            return tipo_expressao
+
         else:
-            self.erro(f"Expressão inválida. Encontrado {tipo}")
-            
+            self.erro(f"Erro semântico: Token inesperado na expressão: {tipo} ({lexema})")
+            return 'ERRO'  # Evita que a função retorne None
+
+
    
 
