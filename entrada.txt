@@ -6,20 +6,21 @@ booleano condicao;
 funcao soma(inteiro a, inteiro b): inteiro {
     inteiro resultado;
     resultado = a + b;
+    inteiro p;
     escreva(resultado);
 }
 
-funcao subtracao(inteiro a, inteiro b): inteiro {
+funcao subtracao(inteiro c, inteiro d): inteiro {
     inteiro resultado;
-    resultado = a - b;
+    resultado = c - d;
     escreva(resultado);
 }
 
-procedimento verificarCondicao(inteiro a, inteiro b) {
-    se ((a > b) e (a != 0) ou (b == 10)) {
-        escreva(a);
+procedimento verificarCondicao(inteiro g, inteiro f) {
+    se ((g > f) e (g != 0) ou (f == 10)) {
+        escreva(g);
     } senao {
-        escreva(b);
+        escreva(f);
     }
 }
 

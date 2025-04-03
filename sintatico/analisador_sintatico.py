@@ -1,22 +1,64 @@
 class TabelaSimbolos:
-    def __init__(self):
+    def __init__(self, escopo='global', anterior=None):
         self.simbolos = {}
+        self.escopo = escopo
+        self.anterior = anterior # para referência ao escopo anterior
+    
+    class TabelaSimbolos:
+    
+     def verificarCondicao(self, identificador):
+        """
+        Verifica se um identificador existe no escopo atual ou no global.
 
-    def adicionar(self, nome, tipo, categoria):
-        if nome in self.simbolos:
-            raise Exception(f"Erro semântico: identificador '{nome}' já declarado.")
+        Args:
+            identificador (str): Nome do identificador a ser buscado.
+
+        Returns:
+            dict: Entrada correspondente na tabela de símbolos, se encontrada.
+
+        Raises:
+            Exception: Se o identificador não for encontrado.
+        """
+        # Primeiro, verifica no escopo atual
+        if identificador in self.simbolos:
+            return self.simbolos[identificador]
+
+        # Se não estiver no escopo atual, busca no escopo anterior (escopo global ou mais acima)
+        if self.anterior:
+            return self.anterior.verificarCondicao(identificador)
+
+        # Se não for encontrado, lança um erro
+        raise Exception(f"Erro semântico: identificador '{identificador}' não declarado no escopo '{self.escopo}'.")
+
+
+    def adicionar(self, nome, tipo, categoria, parametros=None, retorno=None):
+        if self.existe(nome):
+            raise Exception(f"Erro semântico: identificador '{nome}' já declarado no escopo '{self.escopo}'.")
+        
         self.simbolos[nome] = {
             'tipo': tipo,
-            'categoria': categoria
+            'categoria': categoria,
+            'parametros': parametros,
+            'retorno': retorno
         }
 
+
     def buscar(self, nome):
-        if nome not in self.simbolos:
-            raise Exception(f"Erro semântico: identificador '{nome}' não declarado.")
-        return self.simbolos[nome]
+        print(f"Buscando '{nome}' no escopo '{self.escopo}'")  # DEBUG
+        if nome in self.simbolos:
+            return self.simbolos[nome]
+        elif self.anterior:  # Busca no escopo anterior
+            return self.anterior.buscar(nome)
+        else:
+            raise Exception(f"Erro semântico: identificador '{nome}' não declarado no escopo '{self.escopo}'.")
+
 
     def existe(self, nome):
-        return nome in self.simbolos
+        if nome in self.simbolos:
+            return True
+        elif self.anterior:
+            return self.anterior.existe(nome)
+        return False
 
 class Parser:
     def __init__(self, tokens):
@@ -73,14 +115,18 @@ class Parser:
         tipo_token, _ = self.token_atual()
         self.tipo()
         tipo = tipo_token
+        
+        while True:  # Permitir múltiplas variáveis separadas por vírgula
+            _, nome = self.token_atual()
+            self.consumir('ID')
+            self.tabela.adicionar(nome, tipo, 'variavel')
+            
+            if self.token_atual()[0] != 'VIRGULA':  
+                break  # Sai do loop se não houver mais variáveis
+            self.consumir('VIRGULA')  # Consome a vírgula e continua
 
-        self.adicionar_simbolo_variavel(tipo)
+        self.consumir('PONTOVIRGULA')  # Agora consome o ponto e vírgula no final da linha
 
-        while self.token_atual()[0] == 'VIRGULA':
-            self.consumir('VIRGULA')
-            self.adicionar_simbolo_variavel(tipo)
-
-        self.consumir('PONTOVIRGULA')
 
     def adicionar_simbolo_variavel(self, tipo):
         _, nome = self.token_atual()
@@ -97,22 +143,43 @@ class Parser:
     def declaracao_funcao(self):
         self.consumir('FUN')
         _, nome = self.token_atual()
+        print(f"Tabela de símbolos no início da função '{nome}': {self.tabela.simbolos}")
         self.consumir('ID')
         self.consumir('LPAREN')
 
-        escopo_anterior = self.tabela
-        self.tabela = TabelaSimbolos()
-
-        self.parametros()
+        parametros = self.parametros()
+        
         self.consumir('RPAREN')
         self.consumir('DOISPONTOS')
-        tipo_token, _ = self.token_atual()
+        tipo_retorno, _ = self.token_atual()
+
+        if tipo_retorno not in ('INT', 'BOOL', 'STRING'):
+            self.erro(f"Tipo inválido de retorno para função: {tipo_retorno}")
+
         self.tipo()
         self.consumir('LBRACE')
+
+        # Criar novo escopo e adicionar à tabela de símbolos
+        escopo_anterior = self.tabela
+        self.tabela = TabelaSimbolos(escopo=nome, anterior=escopo_anterior)
+
+        # Adicionar parâmetros à tabela da função (escopo local)
+        for param_nome, param_tipo in parametros:
+            print(f"Adicionando parâmetro '{param_nome}' do tipo '{param_tipo}' ao escopo '{nome}'")  # DEBUG
+            self.tabela.adicionar(param_nome, param_tipo, 'parametro')
+
+        # Registrar a função no escopo global
+        escopo_anterior.adicionar(nome, tipo_retorno, 'funcao', parametros, tipo_retorno)
+
+        print(f"Tabela de símbolos dentro da função '{nome}': {self.tabela.simbolos}")  # Debug
+
         self.corpo()
         self.consumir('RBRACE')
 
+        # Restaurar escopo anterior
         self.tabela = escopo_anterior
+
+        
 
     def declaracao_procedimento(self):
         self.consumir('PROC')
@@ -121,36 +188,38 @@ class Parser:
         self.consumir('LPAREN')
 
         escopo_anterior = self.tabela
-        self.tabela = TabelaSimbolos()
+        self.tabela = TabelaSimbolos(escopo=nome, anterior=escopo_anterior)
 
-        self.parametros()
+        parametros = self.parametros()
+        
+        for param_nome, param_tipo in parametros:
+            self.tabela.adicionar(param_nome, param_tipo, 'parametro')
+
         self.consumir('RPAREN')
 
-
-        escopo_anterior.adicionar(nome, 'VOID', 'procedimento')
+        escopo_anterior.adicionar(nome, 'VOID', 'procedimento', parametros)
 
         self.consumir('LBRACE')
         self.corpo()
         self.consumir('RBRACE')
 
-
         self.tabela = escopo_anterior
 
-    def parametros(self):
-        if self.token_atual()[0] in ('INT', 'BOOL', 'STRING'):
-            tipo_token, _ = self.token_atual()
-            self.tipo()
-            _, nome = self.token_atual()
-            self.consumir('ID')
-            self.tabela.adicionar(nome, tipo_token, 'parametro')  # adiciona a tabela o simbolo lido
 
-            while self.token_atual()[0] == 'VIRGULA':
-                self.consumir('VIRGULA')
-                tipo_token, _ = self.token_atual()
+    def parametros(self):
+        parametros = []
+        if self.token_atual()[0] != 'RPAREN':  # Há parâmetros
+            while True:
+                tipo, _ = self.token_atual()
                 self.tipo()
                 _, nome = self.token_atual()
                 self.consumir('ID')
-                self.tabela.adicionar(nome, tipo_token, 'parametro') # mesma coisa aqui, adiciona
+                parametros.append((nome, tipo))
+                if self.token_atual()[0] != 'VIRGULA':
+                    break
+                self.consumir('VIRGULA')
+        return parametros  # Retorna lista vazia caso não tenha parâmetros
+
 
     def comando(self):
         tipo, _ = self.token_atual()
@@ -165,11 +234,16 @@ class Parser:
 
     def atribuicao(self):
         _, nome = self.token_atual()
-        self.tabela.buscar(nome)  # Verifica se a variável foi declarada
+        print(f"Verificando atribuição para '{nome}' no escopo '{self.tabela.escopo}'")  # DEBUG
+
+        if not self.tabela.existe(nome):
+            raise Exception(f"Erro semântico: identificador '{nome}' não declarado no escopo '{self.tabela.escopo}'.")
+
         self.consumir('ID')
         self.consumir('ATRIBUICAO')
         self.expressao()
         self.consumir('PONTOVIRGULA')
+
 
     def comando_escreva(self):
         self.consumir('PRINT')
@@ -248,3 +322,6 @@ class Parser:
             self.consumir('RPAREN')
         else:
             self.erro(f"Expressão inválida. Encontrado {tipo}")
+            
+   
+
