@@ -96,8 +96,8 @@ class Parser:
         self.consumir('END')
 
     def corpo(self):
-        while self.token_atual()[0] not in ('RBRACE', 'END'):
-            if self.token_atual()[0] in ('INT', 'BOOL', 'STRING', 'FUN', 'PROC'):
+        while self.token_atual()[0] not in ('RBRACE', 'END', 'EOF'):
+            if self.token_atual()[0] in ('INT', 'BOOL', 'STRING', 'FUN', 'PROC', 'RETURN'):
                 self.declaracao()
             else:
                 self.comando()
