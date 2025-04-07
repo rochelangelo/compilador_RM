@@ -7,11 +7,11 @@ def main():
 
     tokens = analisar_codigo(codigo)
 
-    print("TOKENS LIDOS:")
-    index = 0
-    for t in tokens:
-        print(f"{index} - {t}")
-        index += 1
+    # print("TOKENS LIDOS:")
+    # index = 0
+    # for t in tokens:
+    #     print(f"{index} - {t}")
+    #     index += 1
 
     parser = Parser(tokens)
     try:

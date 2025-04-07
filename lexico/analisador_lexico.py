@@ -21,7 +21,7 @@ PALAVRAS_RESERVADAS = {
     'escreva': 'PRINT',
     'verdadeiro': 'BOOLEAN',
     'falso': 'BOOLEAN',
-    'retorne': 'RETURN',
+    'retorna': 'RETURN',
     'enquanto': 'WHILE',
     'continue': 'CONTINUE',
     'pare': 'BREAK',

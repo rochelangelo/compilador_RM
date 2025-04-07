@@ -5,8 +5,11 @@ booleano condicao;
 
 funcao soma(inteiro a, inteiro b): inteiro {
     inteiro resultado;
+    x = 2;
     resultado = a + b;
     escreva(resultado);
+    booleano teste;
+    retorna teste;
 }
 
 funcao subtracao(inteiro c, inteiro d): inteiro {

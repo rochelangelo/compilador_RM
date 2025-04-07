@@ -1,10 +1,11 @@
 class TabelaSimbolos:
-    def __init__(self, escopo='global', anterior=None):
+    def __init__(self, escopo='global', anterior=None, tipo_retorno=None):
         self.simbolos = {}
         self.escopo = escopo
         self.anterior = anterior # para referência ao escopo anterior
-    
-    
+        self.tipo_retorno = tipo_retorno
+
+
     def verificarCondicao(self, identificador):
         """
         Verifica se um identificador existe no escopo atual ou no global.
@@ -33,7 +34,7 @@ class TabelaSimbolos:
     def adicionar(self, nome, tipo, categoria, parametros=None, retorno=None):
         if self.existe(nome):
             raise Exception(f"Erro semântico: identificador '{nome}' já declarado no escopo '{self.escopo}'.")
-        
+
         self.simbolos[nome] = {
             'tipo': tipo,
             'categoria': categoria,
@@ -43,7 +44,6 @@ class TabelaSimbolos:
 
 
     def buscar(self, nome):
-        print(f"Buscando '{nome}' no escopo '{self.escopo}'")  # DEBUG
         if nome in self.simbolos:
             return self.simbolos[nome]
         elif self.anterior:  # Busca no escopo anterior
@@ -59,6 +59,13 @@ class TabelaSimbolos:
             return self.anterior.existe(nome)
         return False
 
+    def entrar_escopo(self, nome, tipo_retorno=None):
+        self.escopos.append({
+            'nome': nome,
+            'simbolos': {},
+            'retorno': tipo_retorno
+        })
+
 class Parser:
     def __init__(self, tokens):
         self.tokens = tokens
@@ -71,7 +78,7 @@ class Parser:
             token = self.tokens[self.pos]
             return token.tipo, token.lexema
         return ('EOF', '')
-    
+
     def posicao_token(self):
         return self.pos # Ou a variável correta que armazena a posição
 
@@ -101,7 +108,8 @@ class Parser:
 
     def corpo(self):
         while self.token_atual()[0] not in ('RBRACE', 'END', 'EOF'):
-            if self.token_atual()[0] in ('INT', 'BOOL', 'STRING', 'FUN', 'PROC', 'RETURN'):
+            # print(f'{self.token_atual()[0]}')
+            if self.token_atual()[0] in ('INT', 'BOOL', 'STRING', 'FUN', 'PROC'):
                 self.declaracao()
             else:
                 self.comando()
@@ -147,7 +155,7 @@ class Parser:
             self.erro(f"Expressão inválida: {lexema}")
             return None
 
-    
+
     def declaracao(self):
         tipo, _ = self.token_atual()
         if tipo in ('INT', 'BOOL', 'STRING'):
@@ -161,13 +169,13 @@ class Parser:
         tipo_token, _ = self.token_atual()
         self.tipo()
         tipo = tipo_token
-        
+
         while True:  # Permitir múltiplas variáveis separadas por vírgula
             _, nome = self.token_atual()
             self.consumir('ID')
             self.tabela.adicionar(nome, tipo, 'variavel')
-            
-            if self.token_atual()[0] != 'VIRGULA':  
+
+            if self.token_atual()[0] != 'VIRGULA':
                 break  # Sai do loop se não houver mais variáveis
             self.consumir('VIRGULA')  # Consome a vírgula e continua
 
@@ -189,12 +197,11 @@ class Parser:
     def declaracao_funcao(self):
         self.consumir('FUN')
         _, nome = self.token_atual()
-        print(f"Tabela de símbolos no início da função '{nome}': {self.tabela.simbolos}")
         self.consumir('ID')
         self.consumir('LPAREN')
 
         parametros = self.parametros()
-        
+
         self.consumir('RPAREN')
         self.consumir('DOISPONTOS')
         tipo_retorno, _ = self.token_atual()
@@ -207,17 +214,14 @@ class Parser:
 
         # Criar novo escopo e adicionar à tabela de símbolos
         escopo_anterior = self.tabela
-        self.tabela = TabelaSimbolos(escopo=nome, anterior=escopo_anterior)
+        self.tabela = TabelaSimbolos(escopo=nome, anterior=escopo_anterior, tipo_retorno=tipo_retorno)
 
         # Adicionar parâmetros à tabela da função (escopo local)
         for param_nome, param_tipo in parametros:
-            print(f"Adicionando parâmetro '{param_nome}' do tipo '{param_tipo}' ao escopo '{nome}'")  # DEBUG
             self.tabela.adicionar(param_nome, param_tipo, 'parametro')
 
         # Registrar a função no escopo global
         escopo_anterior.adicionar(nome, tipo_retorno, 'funcao', parametros, tipo_retorno)
-
-        print(f"Tabela de símbolos dentro da função '{nome}': {self.tabela.simbolos}")  # Debug
 
         self.corpo()
         self.consumir('RBRACE')
@@ -225,7 +229,7 @@ class Parser:
         # Restaurar escopo anterior
         self.tabela = escopo_anterior
 
-        
+
 
     def declaracao_procedimento(self):
         self.consumir('PROC')
@@ -237,13 +241,10 @@ class Parser:
         self.tabela = TabelaSimbolos(escopo=nome, anterior=escopo_anterior)
 
         parametros = self.parametros()
-        
+
         for param_nome, param_tipo in parametros:
-            print(f"Adicionando parâmetro '{param_nome}' do tipo '{param_tipo}' ao escopo '{nome}'")  # DEBUG
             self.tabela.adicionar(param_nome, param_tipo, 'parametro')
 
-        print(f"Tabela de símbolos dentro da função '{nome}': {self.tabela.simbolos}")  # Debug
-        
         self.consumir('RPAREN')
 
         escopo_anterior.adicionar(nome, 'VOID', 'procedimento', parametros)
@@ -280,21 +281,22 @@ class Parser:
             self.comando_condicional()
         elif tipo == 'WHILE':
             self.comando_enquanto()
+        elif tipo == 'RETURN':
+            self.comando_retorno()
 
     def tipos_compativeis(self, tipo_variavel, tipo_expressao):
-        # Tipos idênticos são compatíveis
-        if tipo_variavel == tipo_expressao:
-            return True
-        # Regras adicionais de conversão implícita, se aplicável
-        if tipo_variavel == 'INT' and tipo_expressao == 'BOOL':
-            return True  # Exemplo: permitir atribuir um booleano a um inteiro
-        return False  # Caso contrário, a atribuição é inválida
+        # somente tipos idênticos são compatíveis
+        return tipo_variavel == tipo_expressao
 
-    
-    
+        # Regras adicionais de conversão implícita, se aplicável
+        # if tipo_variavel == 'INT' and tipo_expressao == 'BOOL':
+        #     return True  # Exemplo: permitir atribuir um booleano a um inteiro
+        # return False  # Caso contrário, a atribuição é inválida
+
+
+
     def atribuicao(self):
         _, nome = self.token_atual()
-        print(f"Verificando atribuição para '{nome}' no escopo '{self.tabela.escopo}'")  # DEBUG
 
         if not self.tabela.existe(nome):
             raise Exception(f"Erro semântico: identificador '{nome}' não declarado no escopo '{self.tabela.escopo}'.")
@@ -305,19 +307,21 @@ class Parser:
 
         tipo_expressao = self.expressao()
 
-        print(f"DEBUG: '{nome}' declarado como {simbolo['tipo']}, expressão avaliada como {tipo_expressao}")
-        
+
         if not self.tipos_compativeis(simbolo['tipo'], tipo_expressao):
             raise Exception(f"Erro semântico: atribuição inválida. Esperado '{simbolo['tipo']}', mas encontrado '{tipo_expressao}'.")
-        
-        print(f"DEBUG: Próximo token esperado: '{simbolo['tipo']}', recebido: {self.token_atual()}")
+
 
         if self.token_atual()[0] == 'PONTOVIRGULA':
             self.consumir('PONTOVIRGULA')
-        else:
-            print("DEBUG: PONTOVIRGULA já foi consumido, prosseguindo para próximo comando.")
 
-        
+
+
+    def obter_tipo_retorno_funcao(self):
+        for escopo in reversed(self.escopos):
+            if 'retorno' in escopo and escopo['retorno'] is not None:
+                return escopo['retorno']
+        raise Exception("Comando 'retorna' fora de uma função com tipo de retorno.")
 
     def comando_escreva(self):
         self.consumir('PRINT')
@@ -348,61 +352,73 @@ class Parser:
         self.consumir('LBRACE')
         self.corpo()
         self.consumir('RBRACE')
-        
-    
-    def expressao(self): 
-        print(f"DEBUG: Iniciando análise de expressão na linha {self.linha_atual}, token atual: {self.token_atual()}")  # 🔍 Debug
+
+    def comando_retorno(self):
+        self.consumir('RETURN')
+        tipo = self.expressao()
+
+        escopo_funcao = self.tabela
+        while escopo_funcao and escopo_funcao.tipo_retorno is None:
+            escopo_funcao = escopo_funcao.anterior
+
+        if escopo_funcao is None:
+            raise Exception("Comando 'return' fora de função")
+
+        tipo_esperado = escopo_funcao.tipo_retorno
+
+        if tipo != tipo_esperado:
+            raise Exception(f"Tipo de retorno incompatível: esperado {tipo_esperado}, mas encontrado {tipo}")
+
+    def expressao(self):
 
         tipo = self.expressao_termo()
-        print(f"DEBUG: Primeiro termo analisado: {tipo}, próximo token: {self.token_atual()}")  # 🔍 Debug
 
         while self.token_atual() and self.token_atual()[0] in ('SOMA', 'SUB'):
             operador = self.token_atual()[0]  # Captura o operador para debug
-            print(f"DEBUG: Consumindo operador {operador}")  # 🔍 Debug
-            self.consumir(operador)  
-            print(f"DEBUG: Após consumir '{operador}', próximo token: {self.token_atual()}")  # 🔍 Debug
+            self.consumir(operador)
 
-            tipo_direita = self.expressao_termo()  
-            print(f"DEBUG: Expressão analisada: {tipo} {operador} {tipo_direita}")  # 🔍 Debug
+            tipo_direita = self.expressao_termo()
 
-        print(f"DEBUG: Saindo do loop, próximo token: {self.token_atual()}")  # 🔍 Debug
-        
+            if tipo != 'INT' or tipo_direita != 'INT':
+                self.erro(f"Operador '{operador}' espera inteiros, mas recebeu {tipo} e {tipo_direita}")
+
+            tipo = 'INT'
+
+
         # 🔹 Adicionando operadores relacionais
         if self.token_atual() and self.token_atual()[0] in ('IGUAL', 'DIFERENTE', 'MENOR', 'MAIOR', 'MENORIGUAL', 'MAIORIGUAL'):
             operador_relacional = self.token_atual()[0]
-            print(f"DEBUG: Operador relacional encontrado: {operador_relacional}")  # 🔍 Debug
             self.consumir(operador_relacional)
-            print(f"DEBUG: Após consumir '{operador_relacional}', próximo token: {self.token_atual()}")  # 🔍 Debug
 
             tipo_direita = self.expressao_termo()
-            print(f"DEBUG: Expressão relacional analisada: {tipo} {operador_relacional} {tipo_direita}")  # 🔍 Debug
-            
+
+            if tipo != tipo_direita:
+                self.erro(f"Operador relacional '{operador_relacional}' usado com tipos incompatíveis: {tipo} e {tipo_direita}")
+
+            tipo = 'BOOL'
+
         # 🔹 Adicionando operadores lógicos (AND, OR)
         while self.token_atual() and self.token_atual()[0] in ('AND', 'OR'):
             operador_logico = self.token_atual()[0]
-            print(f"DEBUG: Operador lógico encontrado: {operador_logico}")  # 🔍 Debug
             self.consumir(operador_logico)
-            print(f"DEBUG: Após consumir '{operador_logico}', próximo token: {self.token_atual()}")  # 🔍 Debug
 
             tipo_direita = self.expressao_termo()
-            print(f"DEBUG: Expressão lógica analisada: {tipo} {operador_logico} {tipo_direita}")  # 🔍 Debug
+
+            if tipo != 'BOOL' or tipo_direita != 'BOOL':
+                self.erro(f"Operador lógico '{operador_logico}' espera booleanos, mas recebeu {tipo} e {tipo_direita}")
+
+            tipo = 'BOOL'
 
         # Verifica se estamos dentro de um contexto que exige ';'
         if self.token_atual() and self.token_atual()[0] == 'PONTOVIRGULA':
             self.consumir('PONTOVIRGULA')
-            print("DEBUG: PONTOVIRGULA consumido corretamente.")  # 🔍 Debug
         elif self.token_atual() and self.token_atual()[0] == 'RPAREN':
-            print("DEBUG: RPAREN encontrado, expressão válida dentro de parênteses.")  # 🔍 Debug
             return tipo
         else:
             raise Exception(f"Erro sintático no token {self.pos} ({self.token_atual()}): "
                             f"Esperado 'PONTOVIRGULA' ou 'RPAREN', mas encontrado '{self.token_atual()[1] if self.token_atual() else 'EOF'}'.")
 
         return tipo
-
-
-
-
 
     def expressao_or(self):
         self.expressao_and()
@@ -429,24 +445,19 @@ class Parser:
             self.expressao_termo()
 
     def expressao_termo(self):
-        print(f"DEBUG: Entrando em expressao_termo na linha {self.linha_atual}, token atual: {self.token_atual()}")
-        
+
         tipo = self.expressao_fator()
 
         while self.token_atual() and self.token_atual()[0] in ('MULT', 'DIV'):
             operador = self.token_atual()[0]
-            print(f"DEBUG: Encontrado operador {operador}, consumindo...")
             self.consumir(operador)
 
-            print(f"DEBUG: Após consumir '{operador}', próximo token: {self.token_atual()}")
-            
+
             tipo_direita = self.fator()
-            print(f"DEBUG: Tipo do segundo fator: {tipo_direita}")
 
             if not self.tipos_compativeis(tipo, tipo_direita):
                 raise Exception(f"Erro semântico: Operação inválida entre '{tipo}' e '{tipo_direita}'.")
 
-        print(f"DEBUG: Saindo de expressao_termo, próximo token: {self.token_atual()}")
         return tipo
 
 
@@ -454,7 +465,6 @@ class Parser:
     def expressao_fator(self):
         tipo, lexema = self.token_atual()
 
-        print(f"DEBUG: Analisando fator '{lexema}' do tipo '{tipo}'")  # 🔍 Debug
 
         if tipo == 'ID':
             # Busca na tabela de símbolos para obter o tipo do identificador
@@ -486,6 +496,4 @@ class Parser:
             self.erro(f"Erro semântico: Token inesperado na expressão: {tipo} ({lexema})")
             return 'ERRO'  # Evita que a função retorne None
 
-
-   
 
