@@ -77,11 +77,18 @@ class Parser:
         # 🔽 Aqui sim!
         self.codigo_intermediario = []
         self.temp_count = 0
+        self.label_count = 0
     
     def novo_temp(self):
         temp = f"_t{self.temp_count}"
         self.temp_count += 1
         return temp
+    
+    def novo_label(self):
+        label = f"L{self.label_count}"
+        self.label_count += 1
+        return label
+
 
     def token_atual(self):
         if self.pos < len(self.tokens):
@@ -400,23 +407,52 @@ class Parser:
     def comando_escreva(self):
         self.consumir('PRINT')
         self.consumir('LPAREN')
-        self.expressao()
+        resultado = self.expressao()  # resultado = {'tipo': ..., 'lugar': ...}
         self.consumir('RPAREN')
         self.consumir('PONTOVIRGULA')
+
+        self.codigo_intermediario.append(f"escreva({resultado['lugar']})")
+
 
     def comando_condicional(self):
         self.consumir('IF')
         self.consumir('LPAREN')
-        self.expressao()
+        cond = self.expressao()  # retorno: {'tipo', 'lugar'}
         self.consumir('RPAREN')
+
+        if cond['tipo'] != 'BOOL':
+            self.erro("A condição do 'se' deve ser booleana.")
+
+        label_verdadeiro = self.novo_label()
+        label_falso = self.novo_label()
+        label_fim = self.novo_label()
+
+        # if condicao goto L_verdadeiro
+        self.codigo_intermediario.append(f"if {cond['lugar']} goto {label_verdadeiro}")
+        self.codigo_intermediario.append(f"goto {label_falso}")
+
+        # L_verdadeiro:
+        self.codigo_intermediario.append(f"{label_verdadeiro}:")
+
         self.consumir('LBRACE')
         self.corpo()
         self.consumir('RBRACE')
+
+        # depois do bloco verdadeiro, ir pro fim (caso tenha else)
+        self.codigo_intermediario.append(f"goto {label_fim}")
+
+        # L_falso:
+        self.codigo_intermediario.append(f"{label_falso}:")
+
         if self.token_atual()[0] == 'ELSE':
             self.consumir('ELSE')
             self.consumir('LBRACE')
             self.corpo()
             self.consumir('RBRACE')
+
+        # L_fim:
+        self.codigo_intermediario.append(f"{label_fim}:")
+
 
     def comando_enquanto(self):
         self.consumir('WHILE')

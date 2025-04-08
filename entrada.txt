@@ -2,10 +2,13 @@ inicio_programa meuPrograma
 
 inteiro a;
 inteiro b;
-inteiro c;
-a = 2 + 3;
-b = a + 4;
-c = a + b;
+a = 5;
+b = 10;
 
+se (a < b) {
+    escreva(a);
+} senao {
+    escreva(b);
+}
 
 fim_programa
