@@ -61,14 +61,6 @@ def analisar_codigo(codigo):
             pos += 1
             continue
 
-        # Comentários entre chaves
-        # if codigo[pos] == '{':
-        #     end = codigo.find('}', pos)
-        #     if end == -1:
-        #         raise SyntaxError("Comentário não fechado")
-        #     pos = end + 1
-        #     continue
-
         # Números
         match = re.match(r'\d+', codigo[pos:])
         if match:

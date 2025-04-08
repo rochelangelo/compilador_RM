@@ -1,0 +1,10 @@
+inicio_programa main
+booleano resultado;
+
+funcao sempre_verdadeiro(): booleano {
+    retorna verdadeiro;
+}
+
+resultado = sempre_verdadeiro();
+
+fim_programa

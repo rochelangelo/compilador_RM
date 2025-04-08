@@ -74,7 +74,6 @@ class Parser:
         self.linha_atual = 1
         # self.avaliando_argumentos = False
 
-        # 🔽 Aqui sim!
         self.codigo_intermediario = []
         self.temp_count = 0
         self.label_count = 0
@@ -252,13 +251,6 @@ class Parser:
             if not self.tabela.existe(nome):
                 self.erro(f"Identificador '{nome}' não declarado.")
 
-            # Função?
-            # ⚠️ Só chama a função se ainda não estiver avaliando os argumentos da própria função
-            # if (not self.avaliando_argumentos
-            #     and self.pos + 1 < len(self.tokens)
-            #     and self.tokens[self.pos + 1].tipo == 'LPAREN'):
-            #     return self.chamada_funcao_com_retorno()
-
             if self.pos + 1 < len(self.tokens) and self.tokens[self.pos + 1].tipo == 'LPAREN':
                 return self.chamada_funcao_com_retorno()
 
@@ -405,7 +397,7 @@ class Parser:
 
         self.codigo_intermediario.append(f"{nome} := {resultado['lugar']}")
 
-        # 🔐 CORREÇÃO IMPORTANTE: garante que o ponto e vírgula seja consumido corretamente
+        # garante que o ponto e vírgula seja consumido corretamente
         if self.token_atual().tipo == 'PONTOVIRGULA':
             self.consumir('PONTOVIRGULA')
         else:
@@ -636,7 +628,7 @@ class Parser:
                 self.consumir('VIRGULA')
         # self.avaliando_argumentos = False
 
-        self.consumir('RPAREN')  # <- ESSENCIAL AQUI!
+        self.consumir('RPAREN')
 
         if len(argumentos_recebidos) != len(parametros_esperados):
             raise Exception(f"Erro semântico: função '{nome}' espera {len(parametros_esperados)} argumentos, mas recebeu {len(argumentos_recebidos)}.")
