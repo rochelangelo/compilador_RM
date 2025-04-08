@@ -1,0 +1,8 @@
+inicio_programa main
+inteiro a, b, c;
+
+a = 10;
+b = 20;
+c = (a + b) * (a - b);
+
+fim_programa

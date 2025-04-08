@@ -1,0 +1,16 @@
+inicio_programa main
+inteiro a, b, c;
+
+funcao soma(inteiro x, inteiro y): inteiro {
+    retorna x + y;
+}
+
+funcao quadrado(inteiro z): inteiro {
+    retorna z * z;
+}
+
+a = 4;
+b = 2;
+c = quadrado(soma(a, b))
+
+fim_programa

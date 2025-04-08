@@ -2,7 +2,7 @@ from lexico.analisador_lexico import analisar_codigo
 from sintatico.analisador_sintatico import Parser
 
 def main():
-    with open("entrada.txt", "r", encoding="utf-8") as f:
+    with open("entrada_3.txt", "r", encoding="utf-8") as f:
         codigo = f.read()
 
     tokens = analisar_codigo(codigo)

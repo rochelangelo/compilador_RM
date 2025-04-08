@@ -4,7 +4,7 @@ class TabelaSimbolos:
         self.escopo = escopo
         self.anterior = anterior # para referência ao escopo anterior
         self.tipo_retorno = tipo_retorno
-        
+
 
     def verificarCondicao(self, identificador):
         """
@@ -78,12 +78,12 @@ class Parser:
         self.codigo_intermediario = []
         self.temp_count = 0
         self.label_count = 0
-    
+
     def novo_temp(self):
         temp = f"_t{self.temp_count}"
         self.temp_count += 1
         return temp
-    
+
     def novo_label(self):
         label = f"L{self.label_count}"
         self.label_count += 1
@@ -92,8 +92,8 @@ class Parser:
 
     def token_atual(self):
         if self.pos < len(self.tokens):
-            token = self.tokens[self.pos]
-            return token.tipo, token.lexema
+            return self.tokens[self.pos]
+            # return token.tipo, token.lexema
         return ('EOF', '')
 
     def posicao_token(self):
@@ -101,7 +101,9 @@ class Parser:
 
 
     def consumir(self, esperado):
-        tipo, lexema = self.token_atual()
+        token = self.token_atual()
+        tipo = token.tipo
+        lexema = token.lexema
         if tipo == esperado:
             self.pos += 1
             return True
@@ -114,10 +116,11 @@ class Parser:
     def analisar(self):
         self.programa()
 
-        if self.token_atual()[0] != 'EOF':
-            print(f"Token atual na posição {self.pos}: {self.token_atual()}")
-            self.erro(f"Tokens inesperados após 'fim de programa'. Encontrado '{self.token_atual()[0]}' ({self.token_atual()[1]})")
-        
+        if self.token_atual().tipo != 'EOF':
+            token = self.token_atual()
+            print(f"Token atual na posição {self.pos}: {token}")
+            self.erro(f"Tokens inesperados após 'fim de programa'. Encontrado '{token.tipo}' ({token.lexema})")
+
         print("\n✓ Código analisado com sucesso!")
         print("\nCódigo de três endereços gerado:")
         for linha in self.codigo_intermediario:
@@ -131,8 +134,8 @@ class Parser:
         self.consumir('END')
 
     def corpo(self):
-        while self.token_atual()[0] not in ('RBRACE', 'END', 'EOF'):
-            if self.token_atual()[0] in ('INT', 'BOOL', 'STRING', 'FUN', 'PROC'):
+        while self.token_atual().tipo not in ('RBRACE', 'END', 'EOF'):
+            if self.token_atual().tipo in ('INT', 'BOOL', 'STRING', 'FUN', 'PROC'):
                 self.declaracao()
             else:
                 self.comando()
@@ -140,19 +143,20 @@ class Parser:
 
     def expressao_multiplicacao(self):
         self.expressao_unaria()
-        while self.token_atual()[0] in ('MULT', 'DIV'):
-            self.consumir(self.token_atual()[0])
+        while self.token_atual().tipo in ('MULT', 'DIV'):
+            self.consumir(self.token_atual().tipo)
             self.expressao_unaria()
 
     def expressao_unaria(self):
-        if self.token_atual()[0] in ('SUB', 'NEGACAO'):
-            self.consumir(self.token_atual()[0])
+        if self.token_atual().tipo in ('SUB', 'NEGACAO'):
+            self.consumir(self.token_atual().tipo)
         self.expressao_fator()
 
 
 
     def declaracao(self):
-        tipo, _ = self.token_atual()
+        token = self.token_atual()
+        tipo = token.tipo
         if tipo in ('INT', 'BOOL', 'STRING'):
             self.declaracao_variaveis()
         elif tipo == 'FUN':
@@ -161,16 +165,16 @@ class Parser:
             self.declaracao_procedimento()
 
     def declaracao_variaveis(self):
-        tipo_token, _ = self.token_atual()
+        tipo_token = self.token_atual().tipo
         self.tipo()
         tipo = tipo_token
 
         while True:  # Permitir múltiplas variáveis separadas por vírgula
-            _, nome = self.token_atual()
+            nome = self.token_atual().lexema
             self.consumir('ID')
             self.tabela.adicionar(nome, tipo, 'variavel')
 
-            if self.token_atual()[0] != 'VIRGULA':
+            if self.token_atual().tipo != 'VIRGULA':
                 break  # Sai do loop se não houver mais variáveis
             self.consumir('VIRGULA')  # Consome a vírgula e continua
 
@@ -178,12 +182,13 @@ class Parser:
 
 
     def adicionar_simbolo_variavel(self, tipo):
-        _, nome = self.token_atual()
+        nome = self.token_atual().lexema
         self.consumir('ID')
         self.tabela.adicionar(nome, tipo, 'variavel')
 
     def tipo(self):
-        tipo, _ = self.token_atual()
+        token = self.token_atual()
+        tipo = token.tipo
         if tipo in ('INT', 'BOOL', 'STRING'):
             self.consumir(tipo)
         else:
@@ -191,7 +196,7 @@ class Parser:
 
     def declaracao_funcao(self):
         self.consumir('FUN')
-        _, nome = self.token_atual()
+        nome = self.token_atual().lexema
         self.consumir('ID')
         self.consumir('LPAREN')
 
@@ -199,7 +204,7 @@ class Parser:
 
         self.consumir('RPAREN')
         self.consumir('DOISPONTOS')
-        tipo_retorno, _ = self.token_atual()
+        tipo_retorno = self.token_atual().tipo
 
         if tipo_retorno not in ('INT', 'BOOL', 'STRING'):
             self.erro(f"Tipo inválido de retorno para função: {tipo_retorno}")
@@ -226,7 +231,9 @@ class Parser:
 
 
     def expressao_primaria(self):
-        tipo, lexema = self.token_atual()
+        token = self.token_atual()
+        tipo = token.tipo
+        lexema = token.lexema
 
         if tipo == 'NUMERO':
             self.consumir('NUMERO')
@@ -247,8 +254,8 @@ class Parser:
 
             # Função?
             # ⚠️ Só chama a função se ainda não estiver avaliando os argumentos da própria função
-            if (not self.avaliando_argumentos 
-                and self.pos + 1 < len(self.tokens) 
+            if (not self.avaliando_argumentos
+                and self.pos + 1 < len(self.tokens)
                 and self.tokens[self.pos + 1].tipo == 'LPAREN'):
                 return self.chamada_funcao_com_retorno()
 
@@ -266,10 +273,10 @@ class Parser:
             self.erro(f"Expressão inválida: {lexema}")
             return { 'tipo': 'ERRO', 'lugar': '?' }
 
-    
+
     def declaracao_procedimento(self):
         self.consumir('PROC')
-        _, nome = self.token_atual()
+        nome = self.token_atual().lexema
         self.consumir('ID')
         self.consumir('LPAREN')
 
@@ -294,25 +301,29 @@ class Parser:
 
     def parametros(self):
         parametros = []
-        if self.token_atual()[0] != 'RPAREN':  # Há parâmetros
+        if self.token_atual().tipo != 'RPAREN':  # Há parâmetros
             while True:
-                tipo, _ = self.token_atual()
+                token_tipo = self.token_atual()
+                tipo = token_tipo.tipo
                 self.tipo()
-                _, nome = self.token_atual()
+                tokenn_id = self.token_atual()
+                nome = tokenn_id.lexema
                 self.consumir('ID')
                 parametros.append((nome, tipo))
-                if self.token_atual()[0] != 'VIRGULA':
+                if self.token_atual().tipo != 'VIRGULA':
                     break
                 self.consumir('VIRGULA')
         return parametros  # Retorna lista vazia caso não tenha parâmetros
 
 
     def comando(self):
-        tipo, lexema = self.token_atual()
+        token = self.token_atual()
+        tipo = token.tipo
+        lexema = token.lexema
 
         if tipo == 'ID':
             proximo_tipo = self.tokens[self.pos + 1].tipo
-            
+
             if proximo_tipo == 'ATRIBUICAO':
                 self.atribuicao()
             elif proximo_tipo == 'LPAREN':
@@ -330,11 +341,11 @@ class Parser:
             self.comando_retorno()
         elif tipo == 'PONTOVIRGULA':
             self.consumir('PONTOVIRGULA')
-       
 
-            
+
+
     def chamada_procedimento(self):
-        _, nome = self.token_atual()
+        nome = self.token_atual().lexema
 
         if not self.tabela.existe(nome):
             raise Exception(f"Erro semântico: procedimento ou função '{nome}' não declarado.")
@@ -350,18 +361,15 @@ class Parser:
         self.argumentos()
 
         self.consumir('RPAREN')
-        
+
     def argumentos(self):
-        if self.token_atual()[0] != 'RPAREN':
-            while True:
-                self.expressao()
-                if self.token_atual()[0] != 'VIRGULA':
-                    break
+        args = []
+        if self.token_atual().tipo != 'RPAREN':
+            args.append(self.expressao())
+            while self.token_atual().tipo == 'VIRGULA':
                 self.consumir('VIRGULA')
-
-        
-
-
+                args.append(self.expressao())
+        return args
 
     def tipos_compativeis(self, tipo_variavel, tipo_expressao):
         # somente tipos idênticos são compatíveis
@@ -375,7 +383,7 @@ class Parser:
 
 
     def atribuicao(self):
-        _, nome = self.token_atual()
+        nome = self.token_atual().lexema
 
         if not self.tabela.existe(nome):
             raise Exception(f"Identificador '{nome}' não declarado.")
@@ -395,10 +403,10 @@ class Parser:
         self.codigo_intermediario.append(f"{nome} := {resultado['lugar']}")
 
         # 🔐 CORREÇÃO IMPORTANTE: garante que o ponto e vírgula seja consumido corretamente
-        if self.token_atual()[0] == 'PONTOVIRGULA':
+        if self.token_atual().tipo == 'PONTOVIRGULA':
             self.consumir('PONTOVIRGULA')
         else:
-            raise Exception(f"Esperado ';' após atribuição, mas encontrado '{self.token_atual()[1]}'")
+            raise Exception(f"Esperado ';' após atribuição, mas encontrado '{self.token_atual().lexema}'")
 
 
     def obter_tipo_retorno_funcao(self):
@@ -447,7 +455,7 @@ class Parser:
         # L_falso:
         self.codigo_intermediario.append(f"{label_falso}:")
 
-        if self.token_atual()[0] == 'ELSE':
+        if self.token_atual().tipo == 'ELSE':
             self.consumir('ELSE')
             self.consumir('LBRACE')
             self.corpo()
@@ -505,8 +513,8 @@ class Parser:
         esquerda = self.expressao_termo()
 
         # Operadores aritméticos (+ e -)
-        while self.pos < len(self.tokens) and self.token_atual()[0] in ('SOMA', 'SUB'):
-            operador = self.token_atual()[0]
+        while self.pos < len(self.tokens) and self.token_atual().tipo in ('SOMA', 'SUB'):
+            operador = self.token_atual().tipo
             self.consumir(operador)
 
             direita = self.expressao_termo()
@@ -520,8 +528,8 @@ class Parser:
             esquerda = { 'tipo': 'INT', 'lugar': temp }
 
         # Operadores relacionais
-        if self.token_atual() and self.token_atual()[0] in ('IGUAL', 'DIFERENTE', 'MENOR', 'MAIOR', 'MENORIGUAL', 'MAIORIGUAL'):
-            operador = self.token_atual()[0]
+        if self.token_atual() and self.token_atual().tipo in ('IGUAL', 'DIFERENTE', 'MENOR', 'MAIOR', 'MENORIGUAL', 'MAIORIGUAL'):
+            operador = self.token_atual().tipo
             self.consumir(operador)
 
             direita = self.expressao_termo()
@@ -542,8 +550,8 @@ class Parser:
             esquerda = { 'tipo': 'BOOL', 'lugar': temp }
 
         # Operadores lógicos (AND, OR)
-        while self.pos < len(self.tokens) and self.token_atual()[0] in ('AND', 'OR'):
-            operador = self.token_atual()[0]
+        while self.pos < len(self.tokens) and self.token_atual().tipo in ('AND', 'OR'):
+            operador = self.token_atual().tipo
             self.consumir(operador)
 
             direita = self.expressao_termo()
@@ -560,33 +568,33 @@ class Parser:
 
     def expressao_or(self):
         self.expressao_and()
-        while self.token_atual()[0] == 'OR':
+        while self.token_atual().tipo == 'OR':
             self.consumir('OR')
             self.expressao_and()
 
     def expressao_and(self):
         self.expressao_relacional()
-        while self.token_atual()[0] == 'AND':
+        while self.token_atual().tipo == 'AND':
             self.consumir('AND')
             self.expressao_relacional()
 
     def expressao_relacional(self):
         self.expressao_soma()
-        while self.token_atual()[0] in ('IGUAL', 'DIFERENTE', 'MENOR', 'MAIOR', 'MENORIGUAL', 'MAIORIGUAL'):
-            self.consumir(self.token_atual()[0])
+        while self.token_atual().tipo in ('IGUAL', 'DIFERENTE', 'MENOR', 'MAIOR', 'MENORIGUAL', 'MAIORIGUAL'):
+            self.consumir(self.token_atual().tipo)
             self.expressao_soma()
 
     def expressao_soma(self):
         self.expressao_termo()
-        while self.token_atual()[0] in ('SOMA', 'SUB'):
-            self.consumir(self.token_atual()[0])
+        while self.token_atual().tipo in ('SOMA', 'SUB'):
+            self.consumir(self.token_atual().tipo)
             self.expressao_termo()
 
     def expressao_termo(self):
         esquerda = self.expressao_fator()
 
-        while self.pos < len(self.tokens) and self.token_atual()[0] in ('MULT', 'DIV'):
-            operador = self.token_atual()[0]
+        while self.pos < len(self.tokens) and self.token_atual().tipo in ('MULT', 'DIV'):
+            operador = self.token_atual().tipo
             self.consumir(operador)
 
             direita = self.expressao_fator()
@@ -601,9 +609,9 @@ class Parser:
 
         return esquerda
 
-    
+
     def chamada_funcao_com_retorno(self):
-        _, nome = self.token_atual()
+        nome = self.token_atual().lexema
         simbolo = self.tabela.buscar(nome)
 
         if simbolo['categoria'] != 'funcao':
@@ -616,11 +624,11 @@ class Parser:
         argumentos_recebidos = []
 
         self.avaliando_argumentos = True
-        if self.token_atual()[0] != 'RPAREN':
+        if self.token_atual().tipo != 'RPAREN':
             while True:
                 valor = self.expressao()
                 argumentos_recebidos.append(valor)
-                if self.token_atual()[0] != 'VIRGULA':
+                if self.token_atual().tipo != 'VIRGULA':
                     break
                 self.consumir('VIRGULA')
         self.avaliando_argumentos = False
@@ -643,16 +651,16 @@ class Parser:
 
 
     def expressao_fator(self):
-        tipo, lexema = self.token_atual()
+        token = self.token_atual()
+        tipo = token.tipo
+        lexema = token.lexema
 
         if tipo == 'ID':
             if not self.tabela.existe(lexema):
                 self.erro(f"Variável '{lexema}' não declarada.")
-            
-            # Verifica se é chamada de função
-            # ⚠️ Só chama a função se ainda não estiver avaliando os argumentos da própria função
-            if (not self.avaliando_argumentos 
-                and self.pos + 1 < len(self.tokens) 
+
+            if (not self.avaliando_argumentos
+                and self.pos + 1 < len(self.tokens)
                 and self.tokens[self.pos + 1].tipo == 'LPAREN'):
                 return self.chamada_funcao_com_retorno()
 
