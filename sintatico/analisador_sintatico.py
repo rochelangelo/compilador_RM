@@ -272,9 +272,20 @@ class Parser:
 
 
     def comando(self):
-        tipo, _ = self.token_atual()
+        tipo, lexema = self.token_atual()
+
         if tipo == 'ID':
-            self.atribuicao()
+            # Corrigido para acessar corretamente o tipo do próximo token
+            proximo_tipo = self.tokens[self.pos + 1].tipo
+
+            if proximo_tipo == 'ATRIBUICAO':
+                self.atribuicao()
+            elif proximo_tipo == 'LPAREN':
+                self.chamada_procedimento()
+                self.consumir('PONTOVIRGULA')
+            else:
+                self.erro(f"Comando inválido iniciado por identificador: '{lexema}'")
+
         elif tipo == 'PRINT':
             self.comando_escreva()
         elif tipo == 'IF':
@@ -283,6 +294,37 @@ class Parser:
             self.comando_enquanto()
         elif tipo == 'RETURN':
             self.comando_retorno()
+
+            
+    def chamada_procedimento(self):
+        _, nome = self.token_atual()
+
+        if not self.tabela.existe(nome):
+            raise Exception(f"Erro semântico: procedimento ou função '{nome}' não declarado.")
+
+        simbolo = self.tabela.buscar(nome)
+
+        if simbolo['categoria'] not in ('funcao', 'procedimento'):
+            raise Exception(f"Erro semântico: '{nome}' não é uma função nem procedimento.")
+
+        self.consumir('ID')
+        self.consumir('LPAREN')
+
+        self.argumentos()
+
+        self.consumir('RPAREN')
+        
+    def argumentos(self):
+        if self.token_atual()[0] != 'RPAREN':
+            while True:
+                self.expressao()
+                if self.token_atual()[0] != 'VIRGULA':
+                    break
+                self.consumir('VIRGULA')
+
+        
+
+
 
     def tipos_compativeis(self, tipo_variavel, tipo_expressao):
         # somente tipos idênticos são compatíveis
@@ -370,11 +412,11 @@ class Parser:
             raise Exception(f"Tipo de retorno incompatível: esperado {tipo_esperado}, mas encontrado {tipo}")
 
     def expressao(self):
-
         tipo = self.expressao_termo()
 
+        # Operadores aritméticos (+ e -)
         while self.token_atual() and self.token_atual()[0] in ('SOMA', 'SUB'):
-            operador = self.token_atual()[0]  # Captura o operador para debug
+            operador = self.token_atual()[0]
             self.consumir(operador)
 
             tipo_direita = self.expressao_termo()
@@ -384,8 +426,7 @@ class Parser:
 
             tipo = 'INT'
 
-
-        # 🔹 Adicionando operadores relacionais
+        # Operadores relacionais (==, !=, <, >, <=, >=)
         if self.token_atual() and self.token_atual()[0] in ('IGUAL', 'DIFERENTE', 'MENOR', 'MAIOR', 'MENORIGUAL', 'MAIORIGUAL'):
             operador_relacional = self.token_atual()[0]
             self.consumir(operador_relacional)
@@ -397,7 +438,7 @@ class Parser:
 
             tipo = 'BOOL'
 
-        # 🔹 Adicionando operadores lógicos (AND, OR)
+        # Operadores lógicos (AND, OR)
         while self.token_atual() and self.token_atual()[0] in ('AND', 'OR'):
             operador_logico = self.token_atual()[0]
             self.consumir(operador_logico)
@@ -409,15 +450,7 @@ class Parser:
 
             tipo = 'BOOL'
 
-        # Verifica se estamos dentro de um contexto que exige ';'
-        if self.token_atual() and self.token_atual()[0] == 'PONTOVIRGULA':
-            self.consumir('PONTOVIRGULA')
-        elif self.token_atual() and self.token_atual()[0] == 'RPAREN':
-            return tipo
-        else:
-            raise Exception(f"Erro sintático no token {self.pos} ({self.token_atual()}): "
-                            f"Esperado 'PONTOVIRGULA' ou 'RPAREN', mas encontrado '{self.token_atual()[1] if self.token_atual() else 'EOF'}'.")
-
+        # Não consome ;, ), , ou qualquer outro delimitador aqui.
         return tipo
 
     def expressao_or(self):

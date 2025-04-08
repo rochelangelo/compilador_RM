@@ -8,15 +8,17 @@ funcao soma(inteiro a, inteiro b): inteiro {
     x = 2;
     resultado = a + b;
     escreva(resultado);
-    booleano teste;
-    retorna teste;
 }
+
+soma (10, 20);
 
 funcao subtracao(inteiro c, inteiro d): inteiro {
     inteiro resultado;
     resultado = c - d;
     escreva(resultado);
 }
+
+subtracao(15, 5);
 
 procedimento verificarCondicao(inteiro g, inteiro f) {
     se ((g > f) e (g != 0) ou (f == 10)) {
