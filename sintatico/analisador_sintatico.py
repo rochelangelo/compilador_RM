@@ -72,6 +72,7 @@ class Parser:
         self.pos = 0
         self.tabela = TabelaSimbolos()
         self.linha_atual = 1
+        self.avaliando_argumentos = False
 
     def token_atual(self):
         if self.pos < len(self.tokens):
@@ -131,29 +132,44 @@ class Parser:
         if tipo == 'NUMERO':
             self.consumir('NUMERO')
             return 'INT'
+
         elif tipo == 'STRING_LITERAL':
             self.consumir('STRING_LITERAL')
             return 'STRING'
+
         elif tipo == 'TRUE' or tipo == 'FALSE':
             self.consumir(tipo)
             return 'BOOL'
+
         elif tipo == 'ID':
-            _, nome = self.token_atual()
+            nome = lexema
+
             if not self.tabela.existe(nome):
                 raise Exception(f"Erro semântico: identificador '{nome}' não declarado no escopo '{self.tabela.escopo}'.")
+
+            # 🔒 Proteção contra loop de chamadas aninhadas infinitas
+            if (
+                not self.avaliando_argumentos and
+                self.pos + 1 < len(self.tokens) and
+                self.tokens[self.pos + 1].tipo == 'LPAREN'
+            ):
+                return self.chamada_funcao_com_retorno()
+
             simbolo = self.tabela.buscar(nome)
             self.consumir('ID')
-            if 'tipo' not in simbolo:
-                raise Exception(f"Erro semântico: identificador '{nome}' não possui um tipo definido na tabela de símbolos.")
             return simbolo['tipo']
+
         elif tipo == 'LPAREN':
             self.consumir('LPAREN')
             tipo_expressao = self.expressao()
             self.consumir('RPAREN')
             return tipo_expressao
+
         else:
             self.erro(f"Expressão inválida: {lexema}")
-            return None
+            return 'ERRO'
+
+
 
 
     def declaracao(self):
@@ -492,7 +508,43 @@ class Parser:
                 raise Exception(f"Erro semântico: Operação inválida entre '{tipo}' e '{tipo_direita}'.")
 
         return tipo
+    
+    def chamada_funcao_com_retorno(self):
+        _, nome = self.token_atual()
+        simbolo = self.tabela.buscar(nome)
 
+        if simbolo['categoria'] != 'funcao':
+            raise Exception(f"Erro semântico: '{nome}' não é uma função e não pode ser usada em expressões.")
+
+        self.consumir('ID')
+        self.consumir('LPAREN')
+
+        parametros_esperados = simbolo.get('parametros', [])
+        argumentos_recebidos = []
+
+        # 🛡️ Ativa proteção contra recursão infinita
+        self.avaliando_argumentos = True
+
+        if self.token_atual()[0] != 'RPAREN':
+            while True:
+                tipo = self.expressao()
+                argumentos_recebidos.append(tipo)
+                if self.token_atual()[0] != 'VIRGULA':
+                    break
+                self.consumir('VIRGULA')
+
+        self.avaliando_argumentos = False  # 🛡️ Desativa ao sair da chamada
+
+        self.consumir('RPAREN')
+
+        if len(argumentos_recebidos) != len(parametros_esperados):
+            raise Exception(f"Erro semântico: função '{nome}' espera {len(parametros_esperados)} argumentos, mas recebeu {len(argumentos_recebidos)}.")
+
+        for (param_nome, param_tipo), tipo_recebido in zip(parametros_esperados, argumentos_recebidos):
+            if param_tipo != tipo_recebido:
+                raise Exception(f"Erro semântico: tipo do argumento incompatível em '{nome}'. Esperado '{param_tipo}', mas recebeu '{tipo_recebido}'.")
+
+        return simbolo['retorno']
 
 
     def expressao_fator(self):
@@ -500,12 +552,19 @@ class Parser:
 
 
         if tipo == 'ID':
-            # Busca na tabela de símbolos para obter o tipo do identificador
-            simbolo = self.tabela.buscar(lexema)
-            if simbolo is None:
-                self.erro(f"Erro semântico: Variável '{lexema}' não declarada.")
+            nome = lexema
+
+            if not self.tabela.existe(nome):
+                raise Exception(f"Erro semântico: identificador '{nome}' não declarado.")
+
+            # 🔍 Verifica se é uma chamada de função com retorno
+            if self.pos + 1 < len(self.tokens) and self.tokens[self.pos + 1].tipo == 'LPAREN':
+                return self.chamada_funcao_com_retorno()
+
+            simbolo = self.tabela.buscar(nome)
             self.consumir('ID')
             return simbolo['tipo']
+
 
         elif tipo == 'NUMERO':
             self.consumir('NUMERO')
