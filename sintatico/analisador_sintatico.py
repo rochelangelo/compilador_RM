@@ -457,11 +457,29 @@ class Parser:
     def comando_enquanto(self):
         self.consumir('WHILE')
         self.consumir('LPAREN')
-        self.expressao()
+
+        label_inicio = self.novo_label()
+        label_corpo = self.novo_label()
+        label_fim = self.novo_label()
+
+        self.codigo_intermediario.append(f"{label_inicio}:")
+
+        cond = self.expressao()  # retorno: {'tipo', 'lugar'}
+        if cond['tipo'] != 'BOOL':
+            self.erro("A condição do 'enquanto' deve ser booleana.")
+
         self.consumir('RPAREN')
+
+        self.codigo_intermediario.append(f"if {cond['lugar']} goto {label_corpo}")
+        self.codigo_intermediario.append(f"goto {label_fim}")
+        self.codigo_intermediario.append(f"{label_corpo}:")
+
         self.consumir('LBRACE')
         self.corpo()
         self.consumir('RBRACE')
+
+        self.codigo_intermediario.append(f"goto {label_inicio}")
+        self.codigo_intermediario.append(f"{label_fim}:")
 
     def comando_retorno(self):
         self.consumir('RETURN')

@@ -1,14 +1,11 @@
-inicio_programa meuPrograma
+inicio_programa Teste
 
-inteiro a;
-inteiro b;
-a = 5;
-b = 10;
+inteiro x;
+x = 0;
 
-se (a < b) {
-    escreva(a);
-} senao {
-    escreva(b);
+enquanto (x < 3) {
+    escreva(x);
+    x = x + 1;
 }
 
 fim_programa
