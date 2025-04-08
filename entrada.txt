@@ -1,11 +1,13 @@
-inicio_programa Teste
+inicio_programa main
 
-inteiro x;
-x = 0;
+inteiro resultado;
 
-enquanto (x < 3) {
-    escreva(x);
-    x = x + 1;
+funcao soma(inteiro a, inteiro b): inteiro {
+    inteiro r;
+    r = a + b;
+    retorna r;
 }
+
+resultado = soma(10, 20);
 
 fim_programa

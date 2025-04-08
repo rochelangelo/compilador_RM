@@ -115,6 +115,7 @@ class Parser:
         self.programa()
 
         if self.token_atual()[0] != 'EOF':
+            print(f"Token atual na posição {self.pos}: {self.token_atual()}")
             self.erro(f"Tokens inesperados após 'fim de programa'. Encontrado '{self.token_atual()[0]}' ({self.token_atual()[1]})")
         
         print("\n✓ Código analisado com sucesso!")
@@ -131,11 +132,11 @@ class Parser:
 
     def corpo(self):
         while self.token_atual()[0] not in ('RBRACE', 'END', 'EOF'):
-            # print(f'{self.token_atual()[0]}')
             if self.token_atual()[0] in ('INT', 'BOOL', 'STRING', 'FUN', 'PROC'):
                 self.declaracao()
             else:
                 self.comando()
+
 
     def expressao_multiplicacao(self):
         self.expressao_unaria()
@@ -146,51 +147,7 @@ class Parser:
     def expressao_unaria(self):
         if self.token_atual()[0] in ('SUB', 'NEGACAO'):
             self.consumir(self.token_atual()[0])
-        self.expressao_primaria()
-
-    def expressao_primaria(self):
-        tipo, lexema = self.token_atual()
-
-        if tipo == 'NUMERO':
-            self.consumir('NUMERO')
-            return 'INT'
-
-        elif tipo == 'STRING_LITERAL':
-            self.consumir('STRING_LITERAL')
-            return 'STRING'
-
-        elif tipo == 'TRUE' or tipo == 'FALSE':
-            self.consumir(tipo)
-            return 'BOOL'
-
-        elif tipo == 'ID':
-            nome = lexema
-
-            if not self.tabela.existe(nome):
-                raise Exception(f"Erro semântico: identificador '{nome}' não declarado no escopo '{self.tabela.escopo}'.")
-
-            # 🔒 Proteção contra loop de chamadas aninhadas infinitas
-            if (
-                not self.avaliando_argumentos and
-                self.pos + 1 < len(self.tokens) and
-                self.tokens[self.pos + 1].tipo == 'LPAREN'
-            ):
-                return self.chamada_funcao_com_retorno()
-
-            simbolo = self.tabela.buscar(nome)
-            self.consumir('ID')
-            return simbolo['tipo']
-
-        elif tipo == 'LPAREN':
-            self.consumir('LPAREN')
-            tipo_expressao = self.expressao()
-            self.consumir('RPAREN')
-            return tipo_expressao
-
-        else:
-            self.erro(f"Expressão inválida: {lexema}")
-            return 'ERRO'
-
+        self.expressao_fator()
 
 
 
@@ -268,7 +225,48 @@ class Parser:
         self.tabela = escopo_anterior
 
 
+    def expressao_primaria(self):
+        tipo, lexema = self.token_atual()
 
+        if tipo == 'NUMERO':
+            self.consumir('NUMERO')
+            return { 'tipo': 'INT', 'lugar': lexema }
+
+        elif tipo == 'STRING_LITERAL':
+            self.consumir('STRING_LITERAL')
+            return { 'tipo': 'STRING', 'lugar': lexema }
+
+        elif tipo in ('TRUE', 'FALSE'):
+            self.consumir(tipo)
+            return { 'tipo': 'BOOL', 'lugar': lexema }
+
+        elif tipo == 'ID':
+            nome = lexema
+            if not self.tabela.existe(nome):
+                self.erro(f"Identificador '{nome}' não declarado.")
+
+            # Função?
+            # ⚠️ Só chama a função se ainda não estiver avaliando os argumentos da própria função
+            if (not self.avaliando_argumentos 
+                and self.pos + 1 < len(self.tokens) 
+                and self.tokens[self.pos + 1].tipo == 'LPAREN'):
+                return self.chamada_funcao_com_retorno()
+
+            simbolo = self.tabela.buscar(nome)
+            self.consumir('ID')
+            return { 'tipo': simbolo['tipo'], 'lugar': nome }
+
+        elif tipo == 'LPAREN':
+            self.consumir('LPAREN')
+            resultado = self.expressao()
+            self.consumir('RPAREN')
+            return resultado
+
+        else:
+            self.erro(f"Expressão inválida: {lexema}")
+            return { 'tipo': 'ERRO', 'lugar': '?' }
+
+    
     def declaracao_procedimento(self):
         self.consumir('PROC')
         _, nome = self.token_atual()
@@ -313,9 +311,8 @@ class Parser:
         tipo, lexema = self.token_atual()
 
         if tipo == 'ID':
-            # Corrigido para acessar corretamente o tipo do próximo token
             proximo_tipo = self.tokens[self.pos + 1].tipo
-
+            
             if proximo_tipo == 'ATRIBUICAO':
                 self.atribuicao()
             elif proximo_tipo == 'LPAREN':
@@ -323,7 +320,6 @@ class Parser:
                 self.consumir('PONTOVIRGULA')
             else:
                 self.erro(f"Comando inválido iniciado por identificador: '{lexema}'")
-
         elif tipo == 'PRINT':
             self.comando_escreva()
         elif tipo == 'IF':
@@ -332,6 +328,9 @@ class Parser:
             self.comando_enquanto()
         elif tipo == 'RETURN':
             self.comando_retorno()
+        elif tipo == 'PONTOVIRGULA':
+            self.consumir('PONTOVIRGULA')
+       
 
             
     def chamada_procedimento(self):
@@ -379,7 +378,7 @@ class Parser:
         _, nome = self.token_atual()
 
         if not self.tabela.existe(nome):
-            raise Exception(f"Erro semântico: identificador '{nome}' não declarado no escopo '{self.tabela.escopo}'.")
+            raise Exception(f"Identificador '{nome}' não declarado.")
 
         simbolo = self.tabela.buscar(nome)
         self.consumir('ID')
@@ -387,15 +386,19 @@ class Parser:
 
         resultado = self.expressao()
 
+        if not resultado or 'tipo' not in resultado or 'lugar' not in resultado:
+            raise Exception("Erro interno: expressão inválida ou incompleta durante atribuição.")
+
         if not self.tipos_compativeis(simbolo['tipo'], resultado['tipo']):
-            raise Exception(f"Erro semântico: atribuição inválida. Esperado '{simbolo['tipo']}', mas encontrado '{resultado['tipo']}'.")
+            raise Exception(f"Atribuição inválida: esperado '{simbolo['tipo']}', recebeu '{resultado['tipo']}'.")
 
         self.codigo_intermediario.append(f"{nome} := {resultado['lugar']}")
 
+        # 🔐 CORREÇÃO IMPORTANTE: garante que o ponto e vírgula seja consumido corretamente
         if self.token_atual()[0] == 'PONTOVIRGULA':
             self.consumir('PONTOVIRGULA')
-
-
+        else:
+            raise Exception(f"Esperado ';' após atribuição, mas encontrado '{self.token_atual()[1]}'")
 
 
     def obter_tipo_retorno_funcao(self):
@@ -483,7 +486,7 @@ class Parser:
 
     def comando_retorno(self):
         self.consumir('RETURN')
-        tipo = self.expressao()
+        valor = self.expressao()
 
         escopo_funcao = self.tabela
         while escopo_funcao and escopo_funcao.tipo_retorno is None:
@@ -492,16 +495,17 @@ class Parser:
         if escopo_funcao is None:
             raise Exception("Comando 'return' fora de função")
 
-        tipo_esperado = escopo_funcao.tipo_retorno
+        if valor['tipo'] != escopo_funcao.tipo_retorno:
+            raise Exception(f"Tipo de retorno incompatível: esperado {escopo_funcao.tipo_retorno}, mas encontrado {valor['tipo']}")
 
-        if tipo != tipo_esperado:
-            raise Exception(f"Tipo de retorno incompatível: esperado {tipo_esperado}, mas encontrado {tipo}")
+        self.codigo_intermediario.append(f"return {valor['lugar']}")
+
 
     def expressao(self):
         esquerda = self.expressao_termo()
 
         # Operadores aritméticos (+ e -)
-        while self.token_atual() and self.token_atual()[0] in ('SOMA', 'SUB'):
+        while self.pos < len(self.tokens) and self.token_atual()[0] in ('SOMA', 'SUB'):
             operador = self.token_atual()[0]
             self.consumir(operador)
 
@@ -513,8 +517,7 @@ class Parser:
             op_simbolo = '+' if operador == 'SOMA' else '-'
             temp = self.novo_temp()
             self.codigo_intermediario.append(f"{temp} := {esquerda['lugar']} {op_simbolo} {direita['lugar']}")
-
-            esquerda = {'tipo': 'INT', 'lugar': temp}
+            esquerda = { 'tipo': 'INT', 'lugar': temp }
 
         # Operadores relacionais
         if self.token_atual() and self.token_atual()[0] in ('IGUAL', 'DIFERENTE', 'MENOR', 'MAIOR', 'MENORIGUAL', 'MAIORIGUAL'):
@@ -526,7 +529,6 @@ class Parser:
             if esquerda['tipo'] != direita['tipo']:
                 self.erro(f"Operador relacional '{operador}' usado com tipos incompatíveis: {esquerda['tipo']} e {direita['tipo']}")
 
-            temp = self.novo_temp()
             op_map = {
                 'IGUAL': '==',
                 'DIFERENTE': '!=',
@@ -535,11 +537,12 @@ class Parser:
                 'MENORIGUAL': '<=',
                 'MAIORIGUAL': '>='
             }
+            temp = self.novo_temp()
             self.codigo_intermediario.append(f"{temp} := {esquerda['lugar']} {op_map[operador]} {direita['lugar']}")
-            esquerda = {'tipo': 'BOOL', 'lugar': temp}
+            esquerda = { 'tipo': 'BOOL', 'lugar': temp }
 
         # Operadores lógicos (AND, OR)
-        while self.token_atual() and self.token_atual()[0] in ('AND', 'OR'):
+        while self.pos < len(self.tokens) and self.token_atual()[0] in ('AND', 'OR'):
             operador = self.token_atual()[0]
             self.consumir(operador)
 
@@ -548,10 +551,10 @@ class Parser:
             if esquerda['tipo'] != 'BOOL' or direita['tipo'] != 'BOOL':
                 self.erro(f"Operador lógico '{operador}' espera booleanos, mas recebeu {esquerda['tipo']} e {direita['tipo']}")
 
-            temp = self.novo_temp()
             op = '&&' if operador == 'AND' else '||'
+            temp = self.novo_temp()
             self.codigo_intermediario.append(f"{temp} := {esquerda['lugar']} {op} {direita['lugar']}")
-            esquerda = {'tipo': 'BOOL', 'lugar': temp}
+            esquerda = { 'tipo': 'BOOL', 'lugar': temp }
 
         return esquerda
 
@@ -580,27 +583,31 @@ class Parser:
             self.expressao_termo()
 
     def expressao_termo(self):
+        esquerda = self.expressao_fator()
 
-        tipo = self.expressao_fator()
-
-        while self.token_atual() and self.token_atual()[0] in ('MULT', 'DIV'):
+        while self.pos < len(self.tokens) and self.token_atual()[0] in ('MULT', 'DIV'):
             operador = self.token_atual()[0]
             self.consumir(operador)
 
+            direita = self.expressao_fator()
 
-            tipo_direita = self.fator()
+            if esquerda['tipo'] != 'INT' or direita['tipo'] != 'INT':
+                self.erro(f"Operador '{operador}' espera inteiros, mas recebeu {esquerda['tipo']} e {direita['tipo']}")
 
-            if not self.tipos_compativeis(tipo, tipo_direita):
-                raise Exception(f"Erro semântico: Operação inválida entre '{tipo}' e '{tipo_direita}'.")
+            op = '*' if operador == 'MULT' else '/'
+            temp = self.novo_temp()
+            self.codigo_intermediario.append(f"{temp} := {esquerda['lugar']} {op} {direita['lugar']}")
+            esquerda = { 'tipo': 'INT', 'lugar': temp }
 
-        return tipo
+        return esquerda
+
     
     def chamada_funcao_com_retorno(self):
         _, nome = self.token_atual()
         simbolo = self.tabela.buscar(nome)
 
         if simbolo['categoria'] != 'funcao':
-            raise Exception(f"Erro semântico: '{nome}' não é uma função e não pode ser usada em expressões.")
+            raise Exception(f"Erro semântico: '{nome}' não é uma função.")
 
         self.consumir('ID')
         self.consumir('LPAREN')
@@ -608,46 +615,51 @@ class Parser:
         parametros_esperados = simbolo.get('parametros', [])
         argumentos_recebidos = []
 
-        # 🛡️ Ativa proteção contra recursão infinita
         self.avaliando_argumentos = True
-
         if self.token_atual()[0] != 'RPAREN':
             while True:
-                tipo = self.expressao()
-                argumentos_recebidos.append(tipo)
+                valor = self.expressao()
+                argumentos_recebidos.append(valor)
                 if self.token_atual()[0] != 'VIRGULA':
                     break
                 self.consumir('VIRGULA')
+        self.avaliando_argumentos = False
 
-        self.avaliando_argumentos = False  # 🛡️ Desativa ao sair da chamada
-
-        self.consumir('RPAREN')
+        self.consumir('RPAREN')  # <- ESSENCIAL AQUI!
 
         if len(argumentos_recebidos) != len(parametros_esperados):
             raise Exception(f"Erro semântico: função '{nome}' espera {len(parametros_esperados)} argumentos, mas recebeu {len(argumentos_recebidos)}.")
 
-        for (param_nome, param_tipo), tipo_recebido in zip(parametros_esperados, argumentos_recebidos):
-            if param_tipo != tipo_recebido:
-                raise Exception(f"Erro semântico: tipo do argumento incompatível em '{nome}'. Esperado '{param_tipo}', mas recebeu '{tipo_recebido}'.")
+        for (param_nome, param_tipo), arg in zip(parametros_esperados, argumentos_recebidos):
+            if param_tipo != arg['tipo']:
+                raise Exception(f"Erro semântico: tipo de argumento incompatível. Esperado '{param_tipo}', mas recebeu '{arg['tipo']}'.")
 
-        return simbolo['retorno']
+            self.codigo_intermediario.append(f"param {arg['lugar']}")
+
+        temp = self.novo_temp()
+        self.codigo_intermediario.append(f"{temp} := call {nome}, {len(argumentos_recebidos)}")
+
+        return { 'tipo': simbolo['retorno'], 'lugar': temp }
 
 
     def expressao_fator(self):
         tipo, lexema = self.token_atual()
 
         if tipo == 'ID':
-            nome = lexema
-
-            if not self.tabela.existe(nome):
-                raise Exception(f"Erro semântico: identificador '{nome}' não declarado.")
-
-            if self.pos + 1 < len(self.tokens) and self.tokens[self.pos + 1].tipo == 'LPAREN':
+            if not self.tabela.existe(lexema):
+                self.erro(f"Variável '{lexema}' não declarada.")
+            
+            # Verifica se é chamada de função
+            # ⚠️ Só chama a função se ainda não estiver avaliando os argumentos da própria função
+            if (not self.avaliando_argumentos 
+                and self.pos + 1 < len(self.tokens) 
+                and self.tokens[self.pos + 1].tipo == 'LPAREN'):
                 return self.chamada_funcao_com_retorno()
 
-            simbolo = self.tabela.buscar(nome)
+
+            simbolo = self.tabela.buscar(lexema)
             self.consumir('ID')
-            return { 'tipo': simbolo['tipo'], 'lugar': nome }
+            return { 'tipo': simbolo['tipo'], 'lugar': lexema }
 
         elif tipo == 'NUMERO':
             self.consumir('NUMERO')
@@ -657,7 +669,7 @@ class Parser:
             self.consumir('STRING_LITERAL')
             return { 'tipo': 'STRING', 'lugar': lexema }
 
-        elif tipo == 'TRUE' or tipo == 'FALSE':
+        elif tipo in ('TRUE', 'FALSE'):
             self.consumir(tipo)
             return { 'tipo': 'BOOL', 'lugar': lexema }
 
@@ -668,8 +680,9 @@ class Parser:
             return resultado
 
         else:
-            self.erro(f"Erro semântico: Token inesperado na expressão: {tipo} ({lexema})")
+            self.erro(f"Token inesperado na expressão: {tipo}")
             return { 'tipo': 'ERRO', 'lugar': '?' }
+
 
 
 
