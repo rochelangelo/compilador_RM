@@ -11,6 +11,6 @@ funcao quadrado(inteiro z): inteiro {
 
 a = 4;
 b = 2;
-c = quadrado(soma(a, b))
+c = quadrado(soma(a, b));
 
 fim_programa

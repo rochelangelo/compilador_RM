@@ -72,7 +72,7 @@ class Parser:
         self.pos = 0
         self.tabela = TabelaSimbolos()
         self.linha_atual = 1
-        self.avaliando_argumentos = False
+        # self.avaliando_argumentos = False
 
         # 🔽 Aqui sim!
         self.codigo_intermediario = []
@@ -254,9 +254,12 @@ class Parser:
 
             # Função?
             # ⚠️ Só chama a função se ainda não estiver avaliando os argumentos da própria função
-            if (not self.avaliando_argumentos
-                and self.pos + 1 < len(self.tokens)
-                and self.tokens[self.pos + 1].tipo == 'LPAREN'):
+            # if (not self.avaliando_argumentos
+            #     and self.pos + 1 < len(self.tokens)
+            #     and self.tokens[self.pos + 1].tipo == 'LPAREN'):
+            #     return self.chamada_funcao_com_retorno()
+
+            if self.pos + 1 < len(self.tokens) and self.tokens[self.pos + 1].tipo == 'LPAREN':
                 return self.chamada_funcao_com_retorno()
 
             simbolo = self.tabela.buscar(nome)
@@ -623,7 +626,7 @@ class Parser:
         parametros_esperados = simbolo.get('parametros', [])
         argumentos_recebidos = []
 
-        self.avaliando_argumentos = True
+        # self.avaliando_argumentos = True
         if self.token_atual().tipo != 'RPAREN':
             while True:
                 valor = self.expressao()
@@ -631,7 +634,7 @@ class Parser:
                 if self.token_atual().tipo != 'VIRGULA':
                     break
                 self.consumir('VIRGULA')
-        self.avaliando_argumentos = False
+        # self.avaliando_argumentos = False
 
         self.consumir('RPAREN')  # <- ESSENCIAL AQUI!
 
@@ -659,9 +662,12 @@ class Parser:
             if not self.tabela.existe(lexema):
                 self.erro(f"Variável '{lexema}' não declarada.")
 
-            if (not self.avaliando_argumentos
-                and self.pos + 1 < len(self.tokens)
-                and self.tokens[self.pos + 1].tipo == 'LPAREN'):
+            # if (not self.avaliando_argumentos
+            #     and self.pos + 1 < len(self.tokens)
+            #     and self.tokens[self.pos + 1].tipo == 'LPAREN'):
+            #     return self.chamada_funcao_com_retorno()
+
+            if self.pos + 1 < len(self.tokens) and self.tokens[self.pos + 1].tipo == 'LPAREN':
                 return self.chamada_funcao_com_retorno()
 
 
