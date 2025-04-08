@@ -1,13 +1,20 @@
 inicio_programa main
+inteiro a, b, c;
 
-inteiro resultado;
-
-funcao soma(inteiro a, inteiro b): inteiro {
-    inteiro r;
-    r = a + b;
-    retorna r;
+funcao maior(inteiro x, inteiro y): inteiro {
+    se (x > y) {
+        retorna x;
+    } senao {
+        retorna y;
+    }
 }
 
-resultado = soma(10, 20);
+a = 10;
+b = 20;
+c = maior(a, b);
+
+enquanto (c > 0) {
+    c = c - 1;
+}
 
 fim_programa
